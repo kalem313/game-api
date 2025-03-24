@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>🎮 Game Stats Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      background-color: #0f0f0f;
+      color: #ffffff;
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 40px 20px;
+      max-width: 1000px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    h2 {
+      color: #00ffff;
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    label {
+      font-size: 16px;
+      margin-right: 10px;
+    }
+    select {
+      margin-bottom: 20px;
+      padding: 8px;
+      font-size: 16px;
+      background-color: #1a1a1a;
+      color: #fff;
+      border: 1px solid #444;
+      border-radius: 6px;
+      margin-right: 20px;
+    }
+    canvas {
+      background: #1a1a1a;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 60px;
+    }
+    #noDataMsg {
+      text-align: center;
+      color: #888;
+      font-size: 18px;
+      margin-top: 40px;
+    }
+  </style>
+</head>
+<body>
+  <h2>🎮 Game Stats by Year</h2>
+
+  <label for="consoleSelect">Console:</label>
+  <select id="consoleSelect" onchange="loadData()">
+    <option value="">All Consoles</option>
+  </select>
+
+  <label for="genreSelect">Genre:</label>
+  <select id="genreSelect" onchange="loadData()">
+    <option value="">All Genres</option>
+  </select>
+
+  <div id="chartsContainer">
+    <canvas id="salesChart" height="100"></canvas>
+    <canvas id="scoreChart" height="100"></canvas>
+    <canvas id="countChart" height="100"></canvas>
+  </div>
+
+  <div id="noDataMsg" style="display:none;">🚫 No data available for this selection.</div>
+
+  <script>
+    let salesChart, scoreChart, countChart;
+
+    async function populateConsoles() {
+      const res = await fetch('/games/consoles');
+      const consoles = await res.json();
+      const consoleSelect = document.getElementById('consoleSelect');
+
+      const allowed = [
+        'PS2', 'PS3', 'PS4', 'PS5',
+        'X360', 'XONE', 'XS',
+        'Switch', 'Wii', 'WiiU',
+        '3DS', 'DS', 'PSP', 'PSV',
+        'PC', 'GC', 'N64', 'SNES', 'NES'
+      ];
+
+      consoles.filter(c => allowed.includes(c)).forEach(console => {
+        const option = document.createElement('option');
+        option.value = console;
+        option.textContent = console;
+        consoleSelect.appendChild(option);
+      });
+    }
+
+    async function populateGenres() {
+      const res = await fetch('/games/genres');
+      const genres = await res.json();
+      const genreSelect = document.getElementById('genreSelect');
+
+      genres.forEach(genre => {
+        const option = document.createElement('option');
+        option.value = genre;
+        option.textContent = genre;
+        genreSelect.appendChild(option);
+      });
+    }
+
+    function destroyCharts() {
+      salesChart?.destroy();
+      scoreChart?.destroy();
+      countChart?.destroy();
+    }
+
+    async function loadData() {
+      destroyCharts();
+
+      const consoleVal = document.getElementById('consoleSelect').value;
+      const genreVal = document.getElementById('genreSelect').value;
+
+      let url = '/games/stats/by-year';
+      const params = new URLSearchParams();
+      if (consoleVal) params.append('console', consoleVal);
+      if (genreVal) params.append('genre', genreVal);
+      if ([...params].length) url += '?' + params.toString();
+
+      const res = await fetch(url);
+      const data = await res.json();
+
+      const years = data.map(d => d.year);
+      const sales = data.map(d => d.total_sales || 0);
+      const scores = data.map(d => d.avg_score || 0);
+      const counts = data.map(d => d.game_count);
+
+      const hasSales = sales.some(val => val > 0);
+      const hasScores = scores.some(val => val > 0);
+      const hasCounts = counts.some(val => val > 0);
+
+      const hasAnyData = hasSales || hasScores || hasCounts;
+
+      document.getElementById("chartsContainer").style.display = hasAnyData ? "block" : "none";
+      document.getElementById("noDataMsg").style.display = hasAnyData ? "none" : "block";
+
+      if (!hasAnyData) return;
+
+      salesChart = new Chart(document.getElementById('salesChart'), {
+        type: 'bar',
+        data: {
+          labels: years,
+          datasets: [{
+            label: '💰 Global Sales (Millions)',
+            data: sales,
+            backgroundColor: 'rgba(0, 255, 255, 0.5)',
+            borderColor: 'rgba(0, 255, 255, 0.9)',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          plugins: {
+            title: { display: true, text: 'Total Sales per Year', color: '#fff' },
+            legend: { labels: { color: '#fff' } }
+          },
+          scales: {
+            x: { ticks: { color: '#aaa' }, grid: { color: '#333' } },
+            y: { ticks: { color: '#aaa' }, grid: { color: '#333' } }
+          }
+        }
+      });
+
+      scoreChart = new Chart(document.getElementById('scoreChart'), {
+        type: 'line',
+        data: {
+          labels: years,
+          datasets: [{
+            label: '⭐ Avg Critic Score',
+            data: scores,
+            borderColor: 'rgba(255, 99, 132, 1)',
+            backgroundColor: 'rgba(255, 99, 132, 0.1)',
+            tension: 0.4,
+            fill: true
+          }]
+        },
+        options: {
+          plugins: {
+            title: { display: true, text: 'Average Critic Score per Year', color: '#fff' },
+            legend: { labels: { color: '#fff' } }
+          },
+          scales: {
+            x: { ticks: { color: '#aaa' }, grid: { color: '#333' } },
+            y: { ticks: { color: '#aaa' }, grid: { color: '#333' } }
+          }
+        }
+      });
+
+      countChart = new Chart(document.getElementById('countChart'), {
+        type: 'bar',
+        data: {
+          labels: years,
+          datasets: [{
+            label: '🎮 Games Released',
+            data: counts,
+            backgroundColor: 'rgba(153, 102, 255, 0.6)',
+            borderColor: 'rgba(153, 102, 255, 1)',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          plugins: {
+            title: { display: true, text: 'Game Releases per Year', color: '#fff' },
+            legend: { labels: { color: '#fff' } }
+          },
+          scales: {
+            x: { ticks: { color: '#aaa' }, grid: { color: '#333' } },
+            y: { ticks: { color: '#aaa' }, grid: { color: '#333' } }
+          }
+        }
+      });
+    }
+
+    Promise.all([populateConsoles(), populateGenres()]).then(loadData);
+  </script>
+</body>
+</html>
